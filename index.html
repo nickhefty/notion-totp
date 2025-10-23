@@ -5,50 +5,69 @@
   <title>TOTP Generator</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root { --bg:#f7f7f8; --fg:#0f172a; --muted:#64748b; --accent:#2563eb; }
+    :root {
+      --bg:#1e1e1e;
+      --card:#252526;
+      --fg:#f3f4f6;
+      --muted:#9ca3af;
+      --accent:#3b82f6;
+      --border:#333;
+      --copy-bg:#374151;
+      --copy-bg-hover:#4b5563;
+      --copy-success:#10b981;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0; height: 100vh; display: grid; place-items: center;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
       color: var(--fg); background: var(--bg);
     }
     .card {
-      width: 380px; max-width: 94vw; background: #fff; border-radius: 16px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.08); padding: 20px;
+      width: 380px; max-width: 94vw; background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.3);
     }
-    h2 { margin: 0 0 12px; font-weight: 700; font-size: 18px; }
+    h2 { margin: 0 0 12px; font-weight: 600; font-size: 18px; color: var(--fg); }
     .row { display: flex; gap: 8px; }
     input {
-      flex: 1; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px;
+      flex: 1; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: 10px;
       font-size: 14px; outline: none;
+      background: #2d2d2d; color: var(--fg);
     }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,.25); }
     button {
-      padding: 10px 14px; border: 0; border-radius: 10px; background: var(--accent);
-      color: #fff; font-weight: 600; cursor: pointer;
+      padding: 10px 14px; border: 0; border-radius: 10px;
+      background: var(--accent); color: #fff; font-weight: 600;
+      cursor: pointer; transition: background .2s ease;
     }
+    button:hover { background: #2563eb; }
     .muted { color: var(--muted); font-size: 12px; margin-top: 6px; }
     .result {
       display: grid; grid-template-columns: 1fr 56px; align-items: center;
       gap: 12px; margin-top: 16px;
     }
-    .code-area {
-      display: flex; align-items: center; gap: 8px;
-    }
+    .code-area { display: flex; align-items: center; gap: 8px; }
     .code {
       font-size: 32px; letter-spacing: .08em; font-weight: 700;
       padding: 8px 0; min-height: 48px; user-select: text;
+      color: #fff;
     }
     .copy-btn {
-      background: #e2e8f0; border: none; border-radius: 8px; padding: 6px 10px;
-      cursor: pointer; font-size: 14px; font-weight: 600; color: #334155;
+      background: var(--copy-bg); border: none; border-radius: 8px;
+      padding: 6px 10px; cursor: pointer;
+      font-size: 14px; font-weight: 600; color: #d1d5db;
+      transition: background .2s, color .2s;
     }
-    .copy-btn:hover { background: #cbd5e1; }
-    .copied { background: #10b981 !important; color: white !important; }
-    .error { color: #b91c1c; font-size: 13px; min-height: 18px; }
+    .copy-btn:hover { background: var(--copy-bg-hover); color: #fff; }
+    .copied { background: var(--copy-success) !important; color: white !important; }
+    .error { color: #f87171; font-size: 13px; min-height: 18px; }
     .ring {
-      width: 56px; height: 56px; border-radius: 50%; border: 3px solid #e2e8f0;
-      position: relative; display: grid; place-items: center; font-weight: 700;
+      width: 56px; height: 56px; border-radius: 50%;
+      border: 3px solid #444; position: relative;
+      display: grid; place-items: center; font-weight: 700;
+      color: var(--muted);
     }
     .ring::before {
       content: ""; position: absolute; inset: -3px; border-radius: 50%;
@@ -79,107 +98,100 @@
   </div>
 
   <script>
-    // --- Base32 decoder ---
+    // Base32 decode
     const B32 = (() => {
       const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
       const map = Object.create(null);
       for (let i=0;i<alphabet.length;i++) map[alphabet[i]] = i;
-      function clean(s) { return s.toUpperCase().replace(/[\s=]/g, ""); }
-      function decode(s) {
+      function clean(s){ return s.toUpperCase().replace(/[\s=]/g,""); }
+      function decode(s){
         s = clean(s);
         if (!s || /[^A-Z2-7]/.test(s)) throw new Error("Secret must be Base32 (A–Z,2–7)");
-        let bits = 0, value = 0, out = [];
-        for (let i=0;i<s.length;i++) {
-          value = (value << 5) | map[s[i]];
-          bits += 5;
-          if (bits >= 8) {
-            out.push((value >>> (bits - 8)) & 0xff);
-            bits -= 8;
-          }
+        let bits=0,value=0,out=[];
+        for(let i=0;i<s.length;i++){
+          value=(value<<5)|map[s[i]];
+          bits+=5;
+          if(bits>=8){ out.push((value>>>(bits-8))&0xff); bits-=8; }
         }
         return new Uint8Array(out);
       }
-      return { decode };
+      return {decode};
     })();
 
-    async function hmacSha1(keyBytes, msgBytes) {
-      const key = await crypto.subtle.importKey("raw", keyBytes, { name:"HMAC", hash:"SHA-1" }, false, ["sign"]);
-      const sig = await crypto.subtle.sign("HMAC", key, msgBytes);
+    async function hmacSha1(keyBytes,msgBytes){
+      const key=await crypto.subtle.importKey("raw",keyBytes,{name:"HMAC",hash:"SHA-1"},false,["sign"]);
+      const sig=await crypto.subtle.sign("HMAC",key,msgBytes);
       return new Uint8Array(sig);
     }
 
-    async function totpNow(secretB32, digits=6, period=30) {
-      const key = B32.decode(secretB32);
-      const nowSec = Math.floor(Date.now()/1000);
-      let counter = Math.floor(nowSec/period);
-      const msg = new Uint8Array(8);
-      for (let i=7;i>=0;i--) { msg[i] = counter & 0xff; counter >>>= 8; }
-      const hmac = await hmacSha1(key, msg);
-      const offset = hmac[hmac.length - 1] & 0x0f;
-      const bin = ((hmac[offset] & 0x7f) << 24) |
-                  ((hmac[offset+1] & 0xff) << 16) |
-                  ((hmac[offset+2] & 0xff) << 8) |
-                  (hmac[offset+3] & 0xff);
-      return String(bin % 10 ** digits).padStart(digits, "0");
+    async function totpNow(secretB32,digits=6,period=30){
+      const key=B32.decode(secretB32);
+      const nowSec=Math.floor(Date.now()/1000);
+      let counter=Math.floor(nowSec/period);
+      const msg=new Uint8Array(8);
+      for(let i=7;i>=0;i--){ msg[i]=counter&0xff; counter>>>=8; }
+      const hmac=await hmacSha1(key,msg);
+      const offset=hmac[hmac.length-1]&0x0f;
+      const bin=((hmac[offset]&0x7f)<<24)|((hmac[offset+1]&0xff)<<16)|((hmac[offset+2]&0xff)<<8)|(hmac[offset+3]&0xff);
+      return String(bin%10**digits).padStart(digits,"0");
     }
 
-    const input = document.getElementById("secret");
-    const btn = document.getElementById("btn");
-    const codeEl = document.getElementById("code");
-    const errEl = document.getElementById("err");
-    const ring = document.getElementById("ring");
-    const tEl = document.getElementById("t");
-    const copyBtn = document.getElementById("copy");
+    const input=document.getElementById("secret");
+    const btn=document.getElementById("btn");
+    const codeEl=document.getElementById("code");
+    const errEl=document.getElementById("err");
+    const ring=document.getElementById("ring");
+    const tEl=document.getElementById("t");
+    const copyBtn=document.getElementById("copy");
     let timer;
 
-    function updateCountdown(period=30) {
-      const now = Date.now()/1000;
-      const remain = period - (Math.floor(now) % period);
-      tEl.textContent = remain;
-      const rot = ((period - remain) / period) * 360;
-      ring.style.setProperty("--rot", rot + "deg");
+    function updateCountdown(period=30){
+      const now=Date.now()/1000;
+      const remain=period-(Math.floor(now)%period);
+      tEl.textContent=remain;
+      const rot=((period-remain)/period)*360;
+      ring.style.setProperty("--rot",rot+"deg");
     }
 
-    async function render() {
-      errEl.textContent = "";
-      try {
-        const s = input.value.trim();
-        if (!s) { errEl.textContent = "Enter a Base32 secret."; codeEl.textContent=""; return; }
-        const code = await totpNow(s);
-        codeEl.textContent = code;
-      } catch (e) {
-        errEl.textContent = e.message || "Invalid secret";
-        codeEl.textContent = "";
+    async function render(){
+      errEl.textContent="";
+      try{
+        const s=input.value.trim();
+        if(!s){errEl.textContent="Enter a Base32 secret."; codeEl.textContent=""; return;}
+        const code=await totpNow(s);
+        codeEl.textContent=code;
+      }catch(e){
+        errEl.textContent=e.message||"Invalid secret";
+        codeEl.textContent="";
       }
       updateCountdown();
     }
 
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click",()=>{
       clearInterval(timer);
       render();
-      timer = setInterval(render, 1000);
+      timer=setInterval(render,1000);
     });
 
-    copyBtn.addEventListener("click", async () => {
-      const text = codeEl.textContent.trim();
-      if (!text) return;
-      try {
+    copyBtn.addEventListener("click",async()=>{
+      const text=codeEl.textContent.trim();
+      if(!text)return;
+      try{
         await navigator.clipboard.writeText(text);
-        copyBtn.textContent = "Copied!";
+        copyBtn.textContent="Copied!";
         copyBtn.classList.add("copied");
-        setTimeout(() => {
-          copyBtn.textContent = "Copy";
+        setTimeout(()=>{
+          copyBtn.textContent="Copy";
           copyBtn.classList.remove("copied");
-        }, 1200);
-      } catch (err) {
-        alert("Copy failed: " + err);
+        },1200);
+      }catch(err){
+        alert("Copy failed: "+err);
       }
     });
 
-    // Prefill demo secret
-    input.value = "secret";
+    input.value="JBSWY3DPEHPK3PXP";
     render();
-    timer = setInterval(render, 1000);
+    timer=setInterval(render,1000);
   </script>
 </body>
 </html>
