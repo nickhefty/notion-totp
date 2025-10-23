@@ -28,32 +28,44 @@
 </head>
 <body>
   <h2>TOTP Generator</h2>
-  <input id="secret" placeholder="Enter Base32 secret" />
+  <input id="secret" placeholder="Enter Base32 secret" value="JBSWY3DPEHPK3PXP" />
   <button id="generate">Generate</button>
   <div class="code" id="code"></div>
 
   <script>
-    const button = document.getElementById("generate");
     const codeDiv = document.getElementById("code");
+    const input = document.getElementById("secret");
+    const button = document.getElementById("generate");
+    let timer = null;
 
-    button.addEventListener("click", () => {
-      const secret = document.getElementById("secret").value.trim();
-      if (!secret) {
-        codeDiv.textContent = "Enter a secret!";
-        return;
-      }
+    function generateTOTP(secret) {
       try {
         const totp = new OTPAuth.TOTP({
-          secret: OTPAuth.Secret.fromB32(secret),
+          secret: OTPAuth.Secret.fromB32(secret.replace(/\s+/g, "")),
           algorithm: "SHA1",
           digits: 6,
           period: 30
         });
-        const code = totp.generate();
-        codeDiv.textContent = code;
-      } catch (err) {
-        codeDiv.textContent = "Invalid secret";
+        return totp.generate();
+      } catch (e) {
+        return null;
       }
+    }
+
+    function updateCode() {
+      const secret = input.value.trim();
+      const code = generateTOTP(secret);
+      if (!code) {
+        codeDiv.textContent = "Invalid secret";
+        return;
+      }
+      codeDiv.textContent = code;
+    }
+
+    button.addEventListener("click", () => {
+      clearInterval(timer);
+      updateCode();
+      timer = setInterval(updateCode, 1000);
     });
   </script>
 </body>
