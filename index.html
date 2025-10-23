@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>TOTP Generator (No deps)</title>
+  <title>TOTP Generator</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { --bg:#f7f7f8; --fg:#0f172a; --muted:#64748b; --accent:#2563eb; }
@@ -13,7 +13,7 @@
       color: var(--fg); background: var(--bg);
     }
     .card {
-      width: 360px; max-width: 94vw; background: #fff; border-radius: 16px;
+      width: 380px; max-width: 94vw; background: #fff; border-radius: 16px;
       box-shadow: 0 8px 24px rgba(0,0,0,.08); padding: 20px;
     }
     h2 { margin: 0 0 12px; font-weight: 700; font-size: 18px; }
@@ -32,10 +32,19 @@
       display: grid; grid-template-columns: 1fr 56px; align-items: center;
       gap: 12px; margin-top: 16px;
     }
+    .code-area {
+      display: flex; align-items: center; gap: 8px;
+    }
     .code {
       font-size: 32px; letter-spacing: .08em; font-weight: 700;
-      padding: 8px 0; min-height: 48px;
+      padding: 8px 0; min-height: 48px; user-select: text;
     }
+    .copy-btn {
+      background: #e2e8f0; border: none; border-radius: 8px; padding: 6px 10px;
+      cursor: pointer; font-size: 14px; font-weight: 600; color: #334155;
+    }
+    .copy-btn:hover { background: #cbd5e1; }
+    .copied { background: #10b981 !important; color: white !important; }
     .error { color: #b91c1c; font-size: 13px; min-height: 18px; }
     .ring {
       width: 56px; height: 56px; border-radius: 50%; border: 3px solid #e2e8f0;
@@ -55,11 +64,14 @@
       <input id="secret" placeholder="Base32 secret (e.g. JBSWY3DPEHPK3PXP)" />
       <button id="btn">Generate</button>
     </div>
-    <div class="muted">Base32 only (letters A–Z and 2–7). Spaces and “=” padding are OK.</div>
+    <div class="muted">Base32 only (A–Z, 2–7). Spaces and “=” padding are OK.</div>
 
     <div class="result">
       <div>
-        <div id="code" class="code"></div>
+        <div class="code-area">
+          <div id="code" class="code"></div>
+          <button id="copy" class="copy-btn">Copy</button>
+        </div>
         <div id="err" class="error"></div>
       </div>
       <div class="ring" id="ring"><span id="t"></span></div>
@@ -67,7 +79,7 @@
   </div>
 
   <script>
-    // --- Base32 (RFC 4648) decode: accepts no/partial padding, spaces, mixed case ---
+    // --- Base32 decoder ---
     const B32 = (() => {
       const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
       const map = Object.create(null);
@@ -75,7 +87,7 @@
       function clean(s) { return s.toUpperCase().replace(/[\s=]/g, ""); }
       function decode(s) {
         s = clean(s);
-        if (!s || /[^A-Z2-7]/.test(s)) throw new Error("Secret must be Base32 (A–Z, 2–7).");
+        if (!s || /[^A-Z2-7]/.test(s)) throw new Error("Secret must be Base32 (A–Z,2–7)");
         let bits = 0, value = 0, out = [];
         for (let i=0;i<s.length;i++) {
           value = (value << 5) | map[s[i]];
@@ -90,36 +102,34 @@
       return { decode };
     })();
 
-    // --- HMAC-SHA1 using Web Crypto ---
     async function hmacSha1(keyBytes, msgBytes) {
       const key = await crypto.subtle.importKey("raw", keyBytes, { name:"HMAC", hash:"SHA-1" }, false, ["sign"]);
       const sig = await crypto.subtle.sign("HMAC", key, msgBytes);
       return new Uint8Array(sig);
     }
 
-    // --- HOTP/TOTP per RFC 4226/6238 ---
     async function totpNow(secretB32, digits=6, period=30) {
       const key = B32.decode(secretB32);
-      let counter = Math.floor(Date.now()/1000/period);
+      const nowSec = Math.floor(Date.now()/1000);
+      let counter = Math.floor(nowSec/period);
       const msg = new Uint8Array(8);
-      for (let i=7;i>=0;i--) { msg[i] = counter & 0xff; counter >>>= 8; } // big-endian
+      for (let i=7;i>=0;i--) { msg[i] = counter & 0xff; counter >>>= 8; }
       const hmac = await hmacSha1(key, msg);
       const offset = hmac[hmac.length - 1] & 0x0f;
       const bin = ((hmac[offset] & 0x7f) << 24) |
                   ((hmac[offset+1] & 0xff) << 16) |
                   ((hmac[offset+2] & 0xff) << 8) |
                   (hmac[offset+3] & 0xff);
-      const mod = 10 ** digits;
-      return String(bin % mod).padStart(digits, "0");
+      return String(bin % 10 ** digits).padStart(digits, "0");
     }
 
-    // UI wiring
     const input = document.getElementById("secret");
     const btn = document.getElementById("btn");
     const codeEl = document.getElementById("code");
     const errEl = document.getElementById("err");
     const ring = document.getElementById("ring");
     const tEl = document.getElementById("t");
+    const copyBtn = document.getElementById("copy");
     let timer;
 
     function updateCountdown(period=30) {
@@ -132,14 +142,14 @@
 
     async function render() {
       errEl.textContent = "";
-      codeEl.textContent = "";
       try {
         const s = input.value.trim();
-        if (!s) { errEl.textContent = "Enter a Base32 secret."; return; }
+        if (!s) { errEl.textContent = "Enter a Base32 secret."; codeEl.textContent=""; return; }
         const code = await totpNow(s);
         codeEl.textContent = code;
       } catch (e) {
         errEl.textContent = e.message || "Invalid secret";
+        codeEl.textContent = "";
       }
       updateCountdown();
     }
@@ -150,8 +160,24 @@
       timer = setInterval(render, 1000);
     });
 
-    // Prefill a known-good demo secret (Google example)
-    input.value = "JBSWY3DPEHPK3PXP";
+    copyBtn.addEventListener("click", async () => {
+      const text = codeEl.textContent.trim();
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = "Copied!";
+        copyBtn.classList.add("copied");
+        setTimeout(() => {
+          copyBtn.textContent = "Copy";
+          copyBtn.classList.remove("copied");
+        }, 1200);
+      } catch (err) {
+        alert("Copy failed: " + err);
+      }
+    });
+
+    // Prefill demo secret
+    input.value = "secret";
     render();
     timer = setInterval(render, 1000);
   </script>
