@@ -100,7 +100,7 @@
     // --- HOTP/TOTP per RFC 4226/6238 ---
     async function totpNow(secretB32, digits=6, period=30) {
       const key = B32.decode(secretB32);
-      const counter = Math.floor(Date.now()/1000/period);
+      let counter = Math.floor(Date.now()/1000/period);
       const msg = new Uint8Array(8);
       for (let i=7;i>=0;i--) { msg[i] = counter & 0xff; counter >>>= 8; } // big-endian
       const hmac = await hmacSha1(key, msg);
